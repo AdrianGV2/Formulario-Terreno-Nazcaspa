@@ -1,8 +1,10 @@
-// Service worker mínimo: solo cachea la "pantalla de inicio" de la app
-// (esto es lo que permite que sea instalable). NO cachea ni intercepta
-// el formulario de Microsoft: esas peticiones van siempre a la red.
+// Service worker: cachea la "pantalla de inicio" para que sea instalable,
+// pero SIEMPRE intenta traer la versión más nueva desde internet primero
+// (network-first). Solo usa la copia guardada si no hay conexión.
+// NO cachea ni intercepta el formulario de Microsoft: esas peticiones
+// van siempre directo a la red.
 
-const CACHE_NAME = 'formulario-app-v1';
+const CACHE_NAME = 'formulario-app-v2'; // 👉 sube este número cada vez que cambies index.html
 const APP_SHELL = [
   './',
   './index.html',
@@ -30,12 +32,17 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Solo manejamos peticiones al propio origen de la app (el app shell).
-  // Todo lo demás (forms.office.com, login.microsoftonline.com, etc.)
-  // pasa directo a la red sin tocarlo.
+  // Todo lo que no sea del propio sitio (forms.office.com, login de
+  // Microsoft, etc.) pasa directo a la red, sin tocarlo.
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    fetch(event.request)
+      .then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
